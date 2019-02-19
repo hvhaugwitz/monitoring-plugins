@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2017 Hannes von Haugwitz
+# Copyright (c) 2017,2019 Hannes von Haugwitz
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,8 +21,8 @@
 # THE SOFTWARE.
 
 usage() {
-    [ -n "${2}" ] && printf "%s: %s\n" "$(basename "${0}")" "${2}"
-    printf "usage: %s [-f interfaces_file] [bondinterface=]interface[:state][,bondslave2[:bondstate2]...] ...\n" "$(basename "${0}")"
+    [ -n "${2}" ] && printf '%s: %s\n' "$(basename "${0}")" "${2}"
+    printf 'usage: %s [-f interfaces_file] [bondinterface=]interface[:state][,bondslave2[:bondstate2]...] ...\n' "$(basename "${0}")"
     exit "${1}"
 }
 
@@ -121,16 +121,16 @@ done
 
 case "${RETURN_CODE}" in
     0)
-        printf "OK:%s\n" "${MESSAGE}"
+        printf 'OK:%s\n' "${MESSAGE}"
         ;;
     1)
-        printf "WARNING:%s\n" "${MESSAGE}"
+        printf 'WARNING:%s\n' "${MESSAGE}"
         ;;
     2)
-        printf "CRITICAL:%s\n" "${MESSAGE}"
+        printf 'CRITICAL:%s\n' "${MESSAGE}"
         ;;
     3)
-        printf "UNKNOWN:%s\n" "${MESSAGE}"
+        printf 'UNKNOWN:%s\n' "${MESSAGE}"
         ;;
 esac
 
