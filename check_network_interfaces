@@ -48,10 +48,11 @@ check_bonding_interface() {
 check_interface() {
     INTERFACE="${1%%:*}"
     EXPECTED_STATE="${1#*:}"
+    DOWN_EXIT_CODE="${2}"
     if [ -d "/sys/class/net/${INTERFACE}" ]; then
         if [ "$(cat "/sys/class/net/${INTERFACE}/carrier" 2> /dev/null)" = "1" ]; then
             if [ "${EXPECTED_STATE}" = "down" ]; then
-                merge_result "${2}" "up"
+                merge_result "${DOWN_EXIT_CODE}" "up"
             elif [ -n "${EXPECTED_STATE}" ] && [ "${EXPECTED_STATE}" != "${1}" ]; then
                 INTERFACE_SPEED="$(cat "/sys/class/net/${INTERFACE}/speed" 2> /dev/null)"
                 if [ -n "${INTERFACE_SPEED}" ] ; then
@@ -70,7 +71,7 @@ check_interface() {
             fi
         else
             if [ "${EXPECTED_STATE}" != "down" ]; then
-                merge_result "${2}" "down"
+                merge_result "${DOWN_EXIT_CODE}" "down"
             else
                 merge_result 0 "down"
             fi
