@@ -22,7 +22,7 @@
 
 usage() {
     [ -n "${2}" ] && printf '%s: %s\n' "$(basename "${0}")" "${2}"
-    printf 'usage: %s [-f interfaces_file] [bondinterface=]interface[:state][,bondslave2[:bondstate2]...] ...\n' "$(basename "${0}")"
+    printf 'usage: %s [-f interfaces_file] [-r autonegotiation_retries] [bondinterface=]interface[:state][,bondslave2[:bondstate2]...] ...\n' "$(basename "${0}")"
     exit "${1}"
 }
 
@@ -36,12 +36,28 @@ merge_result() {
     [ "${RETURN_CODE}" -lt "${1}" ] && RETURN_CODE=${1}
 }
 
+merge_result_negotiation() {
+    NUM_RETRIES="$((RETRIES -N))"
+    MSG="${2}"
+    [ "${NUM_RETRIES}" -gt "0" ] && MSG="${MSG} (${NUM_RETRIES} auto-negotiations)"
+    merge_result "${1}" "${MSG}"
+}
+
 check_bonding_interface() {
     BOND_INTERFACE="${1%%=*}"
     SLAVES="${1#*=}"
-    check_interface "${BOND_INTERFACE}" 2
+    check_interface "${BOND_INTERFACE}" 2 false
     IFS=','; for SLAVE in ${SLAVES}; do
-        check_interface "${SLAVE}" 1
+        check_interface "${SLAVE}" 1 true
+    done
+}
+
+renegotiate_speed() {
+    ethtool -r "${INTERFACE}"
+    i=15
+    while [ "$(cat "/sys/class/net/${INTERFACE}/speed" 2> /dev/null)" -le "0" ] && [ "${i}" -gt "0" ]; do
+        sleep 2
+        i="$((i-1))"
     done
 }
 
@@ -49,23 +65,32 @@ check_interface() {
     INTERFACE="${1%%:*}"
     EXPECTED_STATE="${1#*:}"
     DOWN_EXIT_CODE="${2}"
+    RENEGOTIATABLE=${3}
     if [ -d "/sys/class/net/${INTERFACE}" ]; then
         if [ "$(cat "/sys/class/net/${INTERFACE}/carrier" 2> /dev/null)" = "1" ]; then
             if [ "${EXPECTED_STATE}" = "down" ]; then
                 merge_result "${DOWN_EXIT_CODE}" "up"
             elif [ -n "${EXPECTED_STATE}" ] && [ "${EXPECTED_STATE}" != "${1}" ]; then
-                INTERFACE_SPEED="$(cat "/sys/class/net/${INTERFACE}/speed" 2> /dev/null)"
-                if [ -n "${INTERFACE_SPEED}" ] ; then
-                    if [ -n "${INTERFACE_SPEED}" ]; then
+                N="${RETRIES}"
+                while
+                    INTERFACE_SPEED="$(cat "/sys/class/net/${INTERFACE}/speed" 2> /dev/null)"
+                    if [ -n "${INTERFACE_SPEED}" ] ; then
                         if [ "${INTERFACE_SPEED}" -eq "${EXPECTED_STATE}" ]; then
-                            merge_result 0 "${INTERFACE_SPEED}Mb/s"
+                            merge_result_negotiation 0 "${INTERFACE_SPEED}Mb/s"
                         else
-                            merge_result 1 "${INTERFACE_SPEED}Mb/s != ${EXPECTED_STATE}Mb/s"
+                            if ${RENEGOTIATABLE} && [ "${N}" -gt "0" ] ; then
+                                renegotiate_speed
+                            else
+                                merge_result_negotiation 1 "${INTERFACE_SPEED}Mb/s != ${EXPECTED_STATE}Mb/s"
+                            fi
                         fi
+                    else
+                        merge_result_negotiation 1 "invalid speed"
                     fi
-                else
-                    merge_result 1 "invalid speed"
-                fi
+                    :
+                    N="$((N-1))"
+                    [ -n "${INTERFACE_SPEED}" ] && [ "${INTERFACE_SPEED}" -ne "${EXPECTED_STATE}" ] && ${RENEGOTIATABLE} && [ "${N}" -ge "0" ]
+                do :; done
             else
                 merge_result 0 "up"
             fi
@@ -82,6 +107,7 @@ check_interface() {
 }
 
 RETURN_CODE=0
+RETRIES=0
 MESSAGE=
 IFACES=
 
@@ -89,6 +115,22 @@ while test ${#} -gt 0 ; do
     case ${1} in
         -h)
             usage 0
+            ;;
+        -r)
+            if ! [ -x "$(command -v ethtool)" ] ; then
+                printf '%s: %s\n' "$(basename "${0}")" "-r requires 'ethtool' to be installed!"
+                exit 1
+            fi
+            case "${2}" in
+                '')
+                    usage 1 "-r needs an argument"
+                    ;;
+                *[!0-9]*)
+                    usage 1 "${2} is not a positive number"
+                    ;;
+            esac
+            RETRIES="${2}"
+            shift
             ;;
         -f)
             [ -r "${2}" ] || usage 1 "cannot access '${2}'" 1>&2
@@ -115,7 +157,7 @@ for IFACE in ${IFACES} ; do
             check_bonding_interface "${IFACE}"
             ;;
         *)
-            check_interface "${IFACE}" 2
+            check_interface "${IFACE}" 2 true
             ;;
     esac
 done
