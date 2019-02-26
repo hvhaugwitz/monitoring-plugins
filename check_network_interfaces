@@ -22,7 +22,7 @@
 
 usage() {
     [ -n "${2}" ] && printf '%s: %s\n' "$(basename "${0}")" "${2}"
-    printf 'usage: %s [-f interfaces_file] [-r autonegotiation_retries] [bondinterface=]interface[:state][,bondslave2[:bondstate2]...] ...\n' "$(basename "${0}")"
+    printf 'usage: %s [-s] [-f interfaces_file] [-r autonegotiation_retries] [bondinterface=]interface[:state][,bondslave2[:bondstate2]...] ...\n' "$(basename "${0}")"
     exit "${1}"
 }
 
@@ -110,6 +110,7 @@ RETURN_CODE=0
 RETRIES=0
 MESSAGE=
 IFACES=
+SYSLOG=false
 
 while test ${#} -gt 0 ; do
     case ${1} in
@@ -139,6 +140,9 @@ while test ${#} -gt 0 ; do
             done < "${2}"
             shift
             ;;
+        -s)
+            SYSLOG=true
+            ;;
         -*)
             usage 1 "unknown option '${1}'" 1>&2
             ;;
@@ -164,17 +168,23 @@ done
 
 case "${RETURN_CODE}" in
     0)
-        printf 'OK:%s\n' "${MESSAGE}"
+        MESSAGE="OK:${MESSAGE}"
         ;;
     1)
-        printf 'WARNING:%s\n' "${MESSAGE}"
+        MESSAGE="WARNING:${MESSAGE}"
         ;;
     2)
-        printf 'CRITICAL:%s\n' "${MESSAGE}"
+        MESSAGE="CRITICAL:${MESSAGE}"
         ;;
     3)
-        printf 'UNKNOWN:%s\n' "${MESSAGE}"
+        MESSAGE="UNKNOWN:${MESSAGE}"
         ;;
 esac
+
+if ${SYSLOG}; then
+    logger -i -t "$(basename "${0}")" "${MESSAGE}"
+else
+    printf '%s\n' "${MESSAGE}"
+fi
 
 exit "${RETURN_CODE}"
